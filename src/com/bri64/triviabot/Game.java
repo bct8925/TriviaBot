@@ -1,5 +1,6 @@
 package com.bri64.triviabot;
 
+import com.bri64.triviabot.bots.TriviaBot;
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -21,20 +22,23 @@ import sx.blah.discord.handle.obj.IMessage;
 import sx.blah.discord.handle.obj.IReaction;
 import sx.blah.discord.handle.obj.IUser;
 import sx.blah.discord.util.RequestBuffer;
+import sx.blah.discord.util.RequestBuilder;
 
 public class Game {
+  private TriviaBot main;
+
   private Map<IUser, Integer> players;
   private List<Question> quiz;
   private int currentQuestion;
   private boolean inProgress = false;
 
-  public Game() {
+  public Game(final TriviaBot main) {
+    this.main = main;
     players = new HashMap<>();
 
     try {
       getQuestions();
     } catch (IOException ex) {
-      System.out.println(ex);
       quiz = new ArrayList<>();
     }
   }
@@ -43,14 +47,12 @@ public class Game {
   public void joinLobby(IUser user) {
     if (!players.containsKey(user)) {
       players.put(user, 0);
-      clear(user.getOrCreatePMChannel());
+      //clear(user.getOrCreatePMChannel());
       sendAll("[Join] - " + user.getName() + " joined!\n(Players: " + players.keySet().stream().map(IUser::getName).collect(Collectors.joining(", ")) + ")");
     }
   }
-  public void send(String message, IUser user) {
-    RequestBuffer.request(() -> {
-      BotUtils.sendMessage(message, user.getOrCreatePMChannel());
-    });
+  private void send(String message, IUser user) {
+    RequestBuffer.request(() -> BotUtils.sendMessage(message, user.getOrCreatePMChannel()));
   }
   private void sendAll(String message) {
     for (IUser user : players.keySet()) {
@@ -95,6 +97,13 @@ public class Game {
       }
       choices.add(answer);
       Collections.shuffle(choices);
+      if (answer.equalsIgnoreCase("true")) {
+        choices.remove(answer);
+        choices.add(0, answer);
+      } else if (answer.equalsIgnoreCase("false")) {
+        choices.remove(answer);
+        choices.add(1, answer);
+      }
       quiz.add(new Question(question, choices, answer));
     }
   }
@@ -150,18 +159,35 @@ public class Game {
       for (IUser users : players.keySet()) {
         send("[Game Over] - You got " + players.get(users) + " questions correct!", users);
       }
+      main.reset();
+
     }).start();
   }
   private void poseQuestion(int number, Question question) {
     for (IUser user : players.keySet()) {
-      RequestBuffer.request(() -> {
-        IMessage message = user.getOrCreatePMChannel().sendMessage("```[Question " + (number + 1) + "] - " + question.toString() + "```");
+      new Thread(() -> {
+        final IMessage[] message = {null};
+        int max = question.getChoices().size();
+        boolean[] done = new boolean[max];
 
-        for (int i = 0; i < question.getChoices().size(); i++) {
+        RequestBuilder rb = new RequestBuilder(main.getClient());
+        rb.shouldBufferRequests(true);
+        rb.setAsync(true);
+        rb.doAction(() -> {
+          message[0] = user.getOrCreatePMChannel()
+              .sendMessage("```[Question " + (number + 1) + "] - " + question.toString() + "```");
+          return true;
+        });
+        for (int i = 0; i < max; i++) {
           int finalI = i;
-          RequestBuffer.request(() -> message.addReaction(ReactionEmoji.of(BotUtils.EMOJI[finalI])));
+          rb.andThen(() -> {
+            message[0].addReaction(ReactionEmoji.of(BotUtils.EMOJI[finalI]));
+            return true;
+          });
         }
-      });
+
+        rb.execute();
+      }).start();
     }
   }
   public void react(IUser user, IReaction reaction) {

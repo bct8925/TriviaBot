@@ -34,8 +34,6 @@ public class Question {
     this.guesses = new HashMap<>();
   }
 
-
-
   public void guess(IUser user, int guess) {
     guesses.put(user, guess == getCorrect());
   }

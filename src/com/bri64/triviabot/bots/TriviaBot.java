@@ -37,11 +37,11 @@ public class TriviaBot extends Bot {
         };
 
         // Reset game and lobby
-        reset();
+        currentGame = new Game(this);
     }
 
-    private void reset() {
-      currentGame = new Game();
+    public void reset() {
+        currentGame = new Game(this);
     }
 
     @Override
