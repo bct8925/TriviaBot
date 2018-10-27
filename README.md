@@ -1,2 +1,2 @@
 # TriviaBot
-Play Trivia!
+Play Trivia with friends through Discord!
